@@ -8,7 +8,8 @@ import numpy as np
 from train import extract_features
 from moviepy.editor import VideoFileClip
 
-HIT_BUFFER_LENGTH = 3
+HIT_BUFFER_LENGTH = 10
+CONFIDENCE_THRESHOLD = 0.90
 
 def slide_window(img, width, height, x_overlap = 0.5, y_overlap = 0.5):
 
@@ -35,7 +36,8 @@ class Pipeline:
         resized = cv2.resize(image, train.TRAINING_IMAGE_SIZE)
         features = extract_features([resized], self.colorspace, flatten=True)
         features = self.scaler.transform(features)
-        return self.classifier.predict(features)
+
+        return self.classifier.predict_proba(features)[0][1]
 
     def process_image(self, image, visualize=False, ):
         # Only search bottom half of image
@@ -44,14 +46,14 @@ class Pipeline:
 
         # TODO: investigate computing features only once per image.
         windows =[]
-        windows += slide_window(img[:img.shape[0]//2, ...], 128, 64, 0.5, 0.5)
+        windows += slide_window(img[:img.shape[0]//2, ...], 128, 64, 0.75, 0.5)
         windows += slide_window(img[:img.shape[0]//2, ...], 128, 128, 0.75, 0.75)
         windows += slide_window(img[2*img.shape[0]//3:, ...], 320, 128, 0.75, 0.25)
 
         hits = []
         for window in windows:
             sub_image = img[window[0][1]:window[1][1], window[0][0]:window[1][0], ...]
-            if self.predict(sub_image) == 1:
+            if self.predict(sub_image) >= CONFIDENCE_THRESHOLD:
                 hits.append(window)
 
         for window in hits:
@@ -81,13 +83,15 @@ class Pipeline:
         return hits
 
     def process_video_image(self, image):
-        hits, _ = self.process_image(image)
+
+        color_converted = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        hits, _ = self.process_image(color_converted)
 
         self.hit_buffer.append(hits)
         if len(self.hit_buffer) > HIT_BUFFER_LENGTH:
             self.hit_buffer.pop(0)
 
-        rectlist, __ = cv2.groupRectangles(self.get_rectlist(), 3, 0.5)
+        rectlist, __ = cv2.groupRectangles(self.get_rectlist(), 5, 0.5)
         hits = self.get_hits(rectlist)
 
         for h in hits:

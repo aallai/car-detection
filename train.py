@@ -33,6 +33,20 @@ def get_colorspace(str):
     else:
         raise Exception('Invalid colorspace provided: ' + str)
 
+# Apply random rotation, translation and shear.
+def jitter(image, angle=15, shift=4, shear=0.1):
+    angle = np.random.uniform(-angle, angle)
+    rotation = cv2.getRotationMatrix2D((image.shape[0]/2, image.shape[1]/2), angle, 1)
+
+    dx, dy = np.random.uniform(-shift, shift, (2,))
+    shear_x, shear_y = np.random.uniform(-shear, shear, (2,))
+
+    trans = np.array([[1.0, shear_x, dx],[shear_y, 1.0, dy]])
+
+    image = cv2.warpAffine(image, trans, image.shape[:2])
+    image = cv2.warpAffine(image, rotation, image.shape[:2])
+    return image
+
 def load_dataset(positive_dirs, negative_dirs):
     positives = []
     negatives = []
@@ -43,7 +57,14 @@ def load_dataset(positive_dirs, negative_dirs):
 
     for d in negative_dirs:
         for file in glob.glob(d + "/*.png"):
-            negatives.append(cv2.imread(file))
+            img = cv2.imread(file)
+            negatives.append(img)
+            negatives.append(jitter(img))
+
+    print("Number of positive training examples:")
+    print(len(positives))
+    print("Number of negative training examples:")
+    print(len(negatives))
 
     images = np.vstack((positives, negatives))
     labels = np.hstack((np.ones(len(positives)), np.zeros(len(negatives))))
@@ -72,7 +93,7 @@ def extract_features(X, colorspace, flatten=False, visualize=False):
     for img in X:
         img = cv2.cvtColor(img, get_colorspace(colorspace))
 
-        hist_features = []
+        #hist_features = []
         hog_features = []
         hog_images = []
 
@@ -84,12 +105,11 @@ def extract_features(X, colorspace, flatten=False, visualize=False):
                 features = hog(img[...,i], orientations=HOG_ANGLE_BINS, pixels_per_cell=HOG_CELL_SIZE, cells_per_block=HOG_CELLS_PER_BLOCK, block_norm='L2-Hys', visualise=False, transform_sqrt=False, feature_vector=flatten)
 
             hog_features.append(features)
-            hist_features.append(np.histogram(img, COLOR_BINS)[0])
 
         if flatten:
-            data.append(np.concatenate((np.array(hist_features).ravel(), np.array(hog_features).ravel())))
+            data.append(np.array(hog_features).ravel())
         else:
-            data.append((hist_features, hog_features))
+            data.append(hog_features)
 
         if visualize:
             images.append(hog_images)
@@ -105,7 +125,7 @@ def train(X, y):
 
     X_train, X_test, y_train, y_test = train_test_split(normed_X, y, test_size=0.2)
 
-    classifier = svm.SVC(kernel='rbf')
+    classifier = svm.SVC(kernel='linear', probability=True)
     classifier.fit(X_train, y_train)
 
     print("Classifier accuracy:")
