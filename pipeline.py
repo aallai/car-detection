@@ -9,8 +9,8 @@ from train import extract_features
 from moviepy.editor import VideoFileClip
 from scipy.ndimage.measurements import label
 
-HIT_BUFFER_LENGTH = 25
-MIN_HITS = 20
+HIT_BUFFER_LENGTH = 20
+MIN_HITS = 15
 CONFIDENCE_THRESHOLD = 0.80
 
 def slide_window(img, width, height, x_overlap = 0.5, y_overlap = 0.5):
@@ -33,6 +33,7 @@ class Pipeline:
     def __init__(self, model):
         with open(model, 'rb') as file:
             self.classifier, self.scaler, self.colorspace = pickle.load(file)
+        self.frame_counter = 0
 
     def predict(self, image):
         resized = cv2.resize(image, train.TRAINING_IMAGE_SIZE)
@@ -41,7 +42,7 @@ class Pipeline:
 
         return self.classifier.predict_proba(features)[0][1]
 
-    def process_image(self, image, visualize=False, ):
+    def process_image(self, image, visualize=False):
         # Only search bottom half of image
         img = image[image.shape[0]//2:,image.shape[1]//2:,...]
 
@@ -66,8 +67,12 @@ class Pipeline:
 
         return hits, image
 
-    # Implement heat map meathod from the lectures.
+    # Implement heat map method from the lectures.
     def draw_bounding_boxes(self, image):
+
+        if self.frame_counter >= 1000 and self.frame_counter <= 1005:
+            cv2.imwrite('./output_images/original{}.jpg'.format(self.frame_counter), cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+
         heatmap = np.zeros_like(image[:,:,0])
 
         for frame in self.hit_buffer:
@@ -75,6 +80,9 @@ class Pipeline:
                 heatmap[hit[0][1]:hit[1][1], hit[0][0]:hit[1][0]] += 1
 
         heatmap[heatmap < MIN_HITS] = 0
+
+        if self.frame_counter >= 1000 and self.frame_counter <= 1005:
+            cv2.imwrite('./output_images/heatmap{}.jpg'.format(self.frame_counter), heatmap)
 
         labeled, num_labels = label(heatmap)
         windows = []
@@ -90,6 +98,9 @@ class Pipeline:
 
             image = cv2.rectangle(image, top_left, bottom_right, (0, 0, 255), 6)
 
+        if self.frame_counter >= 1000 and self.frame_counter <= 1005:
+            cv2.imwrite('./output_images/final{}.jpg'.format(self.frame_counter), cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+
         return image
 
     def process_video_image(self, image):
@@ -100,6 +111,8 @@ class Pipeline:
         self.hit_buffer.append(hits)
         if len(self.hit_buffer) > HIT_BUFFER_LENGTH:
             self.hit_buffer.pop(0)
+
+        self.frame_counter += 1
 
         return self.draw_bounding_boxes(image)
 
@@ -123,7 +136,7 @@ def main():
         i = 0
         for file in glob.glob('./test_images/*.jpg'):
             img = cv2.imread(file)
-            _, img = p.process_image(img, True)
+            hits, img = p.process_image(img, True)
             cv2.imwrite('./output_images/detections{}.jpg'.format(i), img)
             i += 1
 
