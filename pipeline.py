@@ -7,9 +7,11 @@ import time
 import numpy as np
 from train import extract_features
 from moviepy.editor import VideoFileClip
+from scipy.ndimage.measurements import label
 
-HIT_BUFFER_LENGTH = 10
-CONFIDENCE_THRESHOLD = 0.90
+HIT_BUFFER_LENGTH = 25
+MIN_HITS = 20
+CONFIDENCE_THRESHOLD = 0.80
 
 def slide_window(img, width, height, x_overlap = 0.5, y_overlap = 0.5):
 
@@ -41,14 +43,12 @@ class Pipeline:
 
     def process_image(self, image, visualize=False, ):
         # Only search bottom half of image
-        half_image = image.shape[0]//2
-        img = image[half_image:,...]
+        img = image[image.shape[0]//2:,image.shape[1]//2:,...]
 
         # TODO: investigate computing features only once per image.
         windows =[]
-        windows += slide_window(img[:img.shape[0]//2, ...], 128, 64, 0.75, 0.5)
+        windows += slide_window(img[:img.shape[0]//2, ...], 90, 90, 0.75, 0.75)
         windows += slide_window(img[:img.shape[0]//2, ...], 128, 128, 0.75, 0.75)
-        windows += slide_window(img[2*img.shape[0]//3:, ...], 320, 128, 0.75, 0.25)
 
         hits = []
         for window in windows:
@@ -57,30 +57,40 @@ class Pipeline:
                 hits.append(window)
 
         for window in hits:
-            window[0][1] += half_image
-            window[1][1] += half_image
+            window[0][0] += image.shape[1]//2
+            window[1][0] += image.shape[1]//2
+            window[0][1] += image.shape[0]//2
+            window[1][1] += image.shape[0]//2
             if visualize:
                 image = cv2.rectangle(image, tuple(window[0]), tuple(window[1]), (0, 0, 255), 6)
 
         return hits, image
 
-    #
-    # Convert to the format expected by groupRectangles.
-    #
-    def get_rectlist(self):
-        rect = []
-        for hits in self.hit_buffer:
-            for h in hits:
-                rect.append((h[0][0], h[0][1], h[1][0]-h[0][0], h[1][1] - h[0][1]))
+    # Implement heat map meathod from the lectures.
+    def draw_bounding_boxes(self, image):
+        heatmap = np.zeros_like(image[:,:,0])
 
-        return rect
+        for frame in self.hit_buffer:
+            for hit in frame:
+                heatmap[hit[0][1]:hit[1][1], hit[0][0]:hit[1][0]] += 1
 
-    def get_hits(self, rectlist):
-        hits = []
-        for rect in rectlist:
-            hits.append(((rect[0], rect[1]), (rect[0] + rect[2], rect[1] + rect[3])))
+        heatmap[heatmap < MIN_HITS] = 0
 
-        return hits
+        labeled, num_labels = label(heatmap)
+        windows = []
+
+        for i in range(1, num_labels+1):
+            nonzero = (labeled == i).nonzero()
+
+            y = np.array(nonzero[0])
+            x = np.array(nonzero[1])
+
+            top_left = (np.min(x), np.min(y))
+            bottom_right = (np.max(x), np.max(y))
+
+            image = cv2.rectangle(image, top_left, bottom_right, (0, 0, 255), 6)
+
+        return image
 
     def process_video_image(self, image):
 
@@ -91,13 +101,7 @@ class Pipeline:
         if len(self.hit_buffer) > HIT_BUFFER_LENGTH:
             self.hit_buffer.pop(0)
 
-        rectlist, __ = cv2.groupRectangles(self.get_rectlist(), 5, 0.5)
-        hits = self.get_hits(rectlist)
-
-        for h in hits:
-            image = cv2.rectangle(image, h[0], h[1], (0, 0, 255), 6)
-
-        return image
+        return self.draw_bounding_boxes(image)
 
     def process_video(self, video_file, output_file):
         self.hit_buffer = []
