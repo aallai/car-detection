@@ -70,9 +70,6 @@ class Pipeline:
     # Implement heat map method from the lectures.
     def draw_bounding_boxes(self, image):
 
-        if self.frame_counter >= 1000 and self.frame_counter <= 1005:
-            cv2.imwrite('./output_images/original{}.jpg'.format(self.frame_counter), cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-
         heatmap = np.zeros_like(image[:,:,0])
 
         for frame in self.hit_buffer:
@@ -80,9 +77,6 @@ class Pipeline:
                 heatmap[hit[0][1]:hit[1][1], hit[0][0]:hit[1][0]] += 1
 
         heatmap[heatmap < MIN_HITS] = 0
-
-        if self.frame_counter >= 1000 and self.frame_counter <= 1005:
-            cv2.imwrite('./output_images/heatmap{}.jpg'.format(self.frame_counter), heatmap)
 
         labeled, num_labels = label(heatmap)
         windows = []
@@ -97,9 +91,6 @@ class Pipeline:
             bottom_right = (np.max(x), np.max(y))
 
             image = cv2.rectangle(image, top_left, bottom_right, (0, 0, 255), 6)
-
-        if self.frame_counter >= 1000 and self.frame_counter <= 1005:
-            cv2.imwrite('./output_images/final{}.jpg'.format(self.frame_counter), cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
         return image
 
