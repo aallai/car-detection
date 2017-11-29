@@ -9,24 +9,11 @@ from train import extract_features
 from moviepy.editor import VideoFileClip
 from scipy.ndimage.measurements import label
 
-HIT_BUFFER_LENGTH = 20
-MIN_HITS = 15
+HIT_BUFFER_LENGTH = 12
+MIN_HITS = 9
 CONFIDENCE_THRESHOLD = 0.80
 
-def slide_window(img, width, height, x_overlap = 0.5, y_overlap = 0.5):
-
-    windows = []
-
-    for i in range((img.shape[0] - height) // (int(height * (1-y_overlap))) + 1):
-        for j in range((img.shape[1] - width) // (int(width * (1-x_overlap))) + 1):
-            v1_x = int(j * width * (1-x_overlap))
-            v1_y = int(i * height * (1-y_overlap))
-            v2_x = int(v1_x + width)
-            v2_y = int(v1_y + height)
-
-            windows.append([[v1_x, v1_y], [v2_x, v2_y]])
-
-    return windows
+IMAGE_SHAPE = (720, 1280, 3)
 
 class Pipeline:
 
@@ -35,34 +22,54 @@ class Pipeline:
             self.classifier, self.scaler, self.colorspace = pickle.load(file)
         self.frame_counter = 0
 
-    def predict(self, image):
-        resized = cv2.resize(image, train.TRAINING_IMAGE_SIZE)
-        features = extract_features([resized], self.colorspace, flatten=True)
-        features = self.scaler.transform(features)
+    def slide_window(self, image, y_start, x_start, y_end, x_end, scale, x_overlap = 0.5, y_overlap = 0.5):
 
+        image = cv2.resize(image, (int(image.shape[1] / scale), int(image.shape[0] / scale)))
+
+        hog_image = extract_features([image], self.colorspace)[0]
+
+        height_blocks = train.TRAINING_IMAGE_SIZE[0]//train.HOG_CELL_SIZE[0] - train.HOG_CELLS_PER_BLOCK[0] + 1
+        width_blocks = train.TRAINING_IMAGE_SIZE[1]//train.HOG_CELL_SIZE[1] - train.HOG_CELLS_PER_BLOCK[1] + 1
+        y_block_start = int(y_start / scale)//train.HOG_CELL_SIZE[0]
+        x_block_start = int(x_start / scale)//train.HOG_CELL_SIZE[1]
+        y_block_end = int(y_end / scale)//train.HOG_CELL_SIZE[0] - 1
+        x_block_end = int(x_end / scale)//train.HOG_CELL_SIZE[1] - 1
+        y_block_step = height_blocks - int(height_blocks * y_overlap)
+        x_block_step = width_blocks - int(width_blocks * x_overlap)
+
+        hits = []
+        for i in range((y_block_end - y_block_start - height_blocks) // y_block_step + 1):
+            for j in range((x_block_end - x_block_start - width_blocks) // x_block_step + 1):
+                v1_x = j * x_block_step + x_block_start
+                v1_y = i * y_block_step + y_block_start
+                v2_x = v1_x + width_blocks
+                v2_y = v1_y + height_blocks
+
+                features = np.array(hog_image[:, v1_y:v2_y, v1_x:v2_x, ...]).ravel()
+
+                if self.predict([features]) >= CONFIDENCE_THRESHOLD:
+                    v1_x *= int(train.HOG_CELL_SIZE[1] * scale)
+                    v1_y *= int(train.HOG_CELL_SIZE[0] * scale)
+                    v2_x *= int(train.HOG_CELL_SIZE[1] * scale)
+                    v2_y *= int(train.HOG_CELL_SIZE[0] * scale)
+
+                    hits.append([[v1_x, v1_y], [v2_x, v2_y]])
+
+        return hits
+
+    def predict(self, features):
+        features = self.scaler.transform(features)
         return self.classifier.predict_proba(features)[0][1]
 
     def process_image(self, image, visualize=False):
-        # Only search bottom half of image
-        img = image[image.shape[0]//2:,image.shape[1]//2:,...]
 
-        # TODO: investigate computing features only once per image.
-        windows =[]
-        windows += slide_window(img[:img.shape[0]//2, ...], 90, 90, 0.75, 0.75)
-        windows += slide_window(img[:img.shape[0]//2, ...], 128, 128, 0.75, 0.75)
+        hits =[]
+        hits += self.slide_window(image, IMAGE_SHAPE[0]//2, IMAGE_SHAPE[1]//2, IMAGE_SHAPE[0]//2 + 128, IMAGE_SHAPE[1], 1, 0.90, 0.90)
+        hits += self.slide_window(image, IMAGE_SHAPE[0]//2, IMAGE_SHAPE[1]//2, 3*(IMAGE_SHAPE[0]//4), IMAGE_SHAPE[1], 1.5, 0.90, 0.90)
+        hits += self.slide_window(image, IMAGE_SHAPE[0]//2, IMAGE_SHAPE[1]//2, 3*(IMAGE_SHAPE[0]//4), IMAGE_SHAPE[1], 2, 0.75, 0.75)
 
-        hits = []
-        for window in windows:
-            sub_image = img[window[0][1]:window[1][1], window[0][0]:window[1][0], ...]
-            if self.predict(sub_image) >= CONFIDENCE_THRESHOLD:
-                hits.append(window)
-
-        for window in hits:
-            window[0][0] += image.shape[1]//2
-            window[1][0] += image.shape[1]//2
-            window[0][1] += image.shape[0]//2
-            window[1][1] += image.shape[0]//2
-            if visualize:
+        if visualize:
+            for window in hits:
                 image = cv2.rectangle(image, tuple(window[0]), tuple(window[1]), (0, 0, 255), 6)
 
         return hits, image

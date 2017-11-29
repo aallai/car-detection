@@ -89,7 +89,6 @@ def extract_features(X, colorspace, flatten=False, visualize=False):
     for img in X:
         img = cv2.cvtColor(img, get_colorspace(colorspace))
 
-        #hist_features = []
         hog_features = []
         hog_images = []
 
@@ -121,7 +120,7 @@ def train(X, y):
 
     X_train, X_test, y_train, y_test = train_test_split(normed_X, y, test_size=0.2)
 
-    classifier = svm.SVC(kernel='linear', probability=True)
+    classifier = svm.SVC(kernel='linear', C=0.001, probability=True)
     classifier.fit(X_train, y_train)
 
     print("Classifier accuracy:")
