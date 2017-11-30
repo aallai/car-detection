@@ -10,8 +10,8 @@ from moviepy.editor import VideoFileClip
 from scipy.ndimage.measurements import label
 
 HIT_BUFFER_LENGTH = 12
-MIN_HITS = 9
-CONFIDENCE_THRESHOLD = 0.80
+MIN_HITS = 15
+CONFIDENCE_THRESHOLD = 0.6
 
 IMAGE_SHAPE = (720, 1280, 3)
 
@@ -26,7 +26,7 @@ class Pipeline:
 
         image = cv2.resize(image, (int(image.shape[1] / scale), int(image.shape[0] / scale)))
 
-        hog_image = extract_features([image], self.colorspace)[0]
+        hog_image, scaled_img = extract_features([image], self.colorspace)[0]
 
         height_blocks = train.TRAINING_IMAGE_SIZE[0]//train.HOG_CELL_SIZE[0] - train.HOG_CELLS_PER_BLOCK[0] + 1
         width_blocks = train.TRAINING_IMAGE_SIZE[1]//train.HOG_CELL_SIZE[1] - train.HOG_CELLS_PER_BLOCK[1] + 1
@@ -45,7 +45,13 @@ class Pipeline:
                 v2_x = v1_x + width_blocks
                 v2_y = v1_y + height_blocks
 
-                features = np.array(hog_image[:, v1_y:v2_y, v1_x:v2_x, ...]).ravel()
+                v1_x_spatial = int(v1_x*train.HOG_CELL_SIZE[1]*train.SPATIAL_FEATURE_SCALE)
+                v1_y_spatial = int(v1_y*train.HOG_CELL_SIZE[1]*train.SPATIAL_FEATURE_SCALE)
+
+                spatial_features = scaled_img[v1_y_spatial:v1_y_spatial+int(train.TRAINING_IMAGE_SIZE[1]*train.SPATIAL_FEATURE_SCALE),
+                                              v1_x_spatial:v1_x_spatial+int(train.TRAINING_IMAGE_SIZE[0]*train.SPATIAL_FEATURE_SCALE), ...]
+
+                features = np.concatenate([hog_image[:, v1_y:v2_y, v1_x:v2_x, ...].ravel(), spatial_features.ravel()])
 
                 if self.predict([features]) >= CONFIDENCE_THRESHOLD:
                     v1_x *= int(train.HOG_CELL_SIZE[1] * scale)

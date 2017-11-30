@@ -14,7 +14,8 @@ TRAINING_IMAGE_SIZE = (64, 64)
 # Hog parameters.
 HOG_CELL_SIZE = (8, 8)
 HOG_CELLS_PER_BLOCK = (2, 2)
-HOG_ANGLE_BINS = 12
+HOG_ANGLE_BINS = 9
+SPATIAL_FEATURE_SCALE = 0.5
 
 def get_colorspace(str):
     if str == 'RGB':
@@ -55,6 +56,9 @@ def load_dataset(positive_dirs, negative_dirs):
     for d in negative_dirs:
         for file in glob.glob(d + "/*.png"):
             img = cv2.imread(file)
+            if img.shape != (64, 64, 3):
+                print(file)
+                print(img.shape)
             negatives.append(img)
             negatives.append(jitter(img))
 
@@ -88,6 +92,7 @@ def extract_features(X, colorspace, flatten=False, visualize=False):
     images = []
     for img in X:
         img = cv2.cvtColor(img, get_colorspace(colorspace))
+        scaled_img = cv2.resize(img, (int(img.shape[1]*SPATIAL_FEATURE_SCALE), int(img.shape[0]*SPATIAL_FEATURE_SCALE)))
 
         hog_features = []
         hog_images = []
@@ -102,9 +107,10 @@ def extract_features(X, colorspace, flatten=False, visualize=False):
             hog_features.append(features)
 
         if flatten:
-            data.append(np.array(hog_features).ravel())
+            data.append(np.concatenate([np.array(hog_features).ravel(), scaled_img.ravel()]))
+
         else:
-            data.append(hog_features)
+            data.append((np.array(hog_features), np.array(scaled_img)))
 
         if visualize:
             images.append(hog_images)
@@ -120,7 +126,7 @@ def train(X, y):
 
     X_train, X_test, y_train, y_test = train_test_split(normed_X, y, test_size=0.2)
 
-    classifier = svm.SVC(kernel='linear', C=0.001, probability=True)
+    classifier = svm.SVC(kernel='linear', C=0.0001, probability=True)
     classifier.fit(X_train, y_train)
 
     print("Classifier accuracy:")
