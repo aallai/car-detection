@@ -61,6 +61,8 @@ def load_dataset(positive_dirs, negative_dirs):
                 print(img.shape)
             negatives.append(img)
             negatives.append(jitter(img))
+            negatives.append(jitter(img))
+            negatives.append(jitter(img))
 
     print("Number of positive training examples:")
     print(len(positives))
@@ -126,7 +128,7 @@ def train(X, y):
 
     X_train, X_test, y_train, y_test = train_test_split(normed_X, y, test_size=0.2)
 
-    classifier = svm.SVC(kernel='linear', C=0.0001, probability=True)
+    classifier = svm.SVC(kernel='linear', class_weight={0: 100, 1:1}, probability=True)
     classifier.fit(X_train, y_train)
 
     print("Classifier accuracy:")

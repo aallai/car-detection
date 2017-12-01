@@ -10,7 +10,7 @@ from moviepy.editor import VideoFileClip
 from scipy.ndimage.measurements import label
 
 HIT_BUFFER_LENGTH = 12
-MIN_HITS = 15
+MIN_HITS = 20
 CONFIDENCE_THRESHOLD = 0.6
 
 IMAGE_SHAPE = (720, 1280, 3)
@@ -70,7 +70,7 @@ class Pipeline:
     def process_image(self, image, visualize=False):
 
         hits =[]
-        hits += self.slide_window(image, IMAGE_SHAPE[0]//2, IMAGE_SHAPE[1]//2, IMAGE_SHAPE[0]//2 + 128, IMAGE_SHAPE[1], 1, 0.90, 0.90)
+        hits += self.slide_window(image, IMAGE_SHAPE[0]//2, IMAGE_SHAPE[1]//2, IMAGE_SHAPE[0]//2 + 128, IMAGE_SHAPE[1]//2, 1, 0.90, 0.90)
         hits += self.slide_window(image, IMAGE_SHAPE[0]//2, IMAGE_SHAPE[1]//2, 3*(IMAGE_SHAPE[0]//4), IMAGE_SHAPE[1], 1.5, 0.90, 0.90)
         hits += self.slide_window(image, IMAGE_SHAPE[0]//2, IMAGE_SHAPE[1]//2, 3*(IMAGE_SHAPE[0]//4), IMAGE_SHAPE[1], 2, 0.75, 0.75)
 
