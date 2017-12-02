@@ -28,11 +28,11 @@ Example YUV HOG features:
 
 #### 2. Explain how you settled on your final choice of HOG parameters.
 
-I used classifier accuracy to guide my choice initially. I had poor performance on the section of video where the white car passes the green road sign, so I cropped a few frames from that section and manually insepected the performance on those images.
+I used classifier accuracy to guide my choice initially. I had poor performance on the section of video where the white car passes the green road sign, so I cropped a few frames from that section and manually inspected the performance on those images.
 
 #### 3. Describe how (and identify where in your code) you trained a classifier using your selected HOG features (and color features if you used them).
 
-The train.py file implements loading the dataset and training the svm. I augment the negative training examples using code from the traffic sign classification project, and end up with 4x non-car examples. I also mined some negative examples from a few difficult video frames. My goal was to reduce false positives.
+The train.py file implements loading the dataset and training a linear SVM. I augment the negative training examples by a factor of 4. I also mined some negative examples from a few difficult video frames. My goal was to reduce false positives.
 
 ### Sliding Window Search
 
@@ -67,9 +67,7 @@ Here is a gif for the github readme:
 
 #### 2. Describe how (and identify where in your code) you implemented some kind of filter for false positives and some method for combining overlapping bounding boxes.
 
-I used the heatmap method from the lectures. The code in is draw_bounding_boxes() in pipeline.py. Initially I tried to use the groupRectangles() function from opencv, but the results were not as nice. The main issue was that my sliding windows were too small to fully enclose the cars. It also tended to cluster rectangles from two close-by cars together, and output a rectangle halfway between the two. The heatmap method seems to segment them better. It also "smears" small detection windows across the whole car, so you tend to get a large enough bounding box even if your windows are smaller than the car.
-
-I keep about 12 frames of history, and threshold out pixels in less than 20 detections.
+I used the heatmap method from the lectures. The code in is draw_bounding_boxes() in pipeline.py. I keep about 12 frames of history, and threshold out pixels that are in less than 20 detections.
 
 Here is a frame, a heatmap showing the accumulated detections, and the final output.
 
@@ -84,6 +82,8 @@ Here is a frame, a heatmap showing the accumulated detections, and the final out
 ### Discussion
 
 #### 1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
+
+I had trouble detecting the white car in some frames without blowing up the number of false positives. There seemed to be a real tradeoff between precision and recall with the linear SVM.
 
 The pipeline has a few brief false positive windows. Using a better classifier might help there.
 
